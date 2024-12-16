@@ -9,6 +9,7 @@
     <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\FsCheck\src\FsCheck\FsCheck.fsproj" />
     <ProjectReference Include="..\Expecto\Expecto.fsproj" />
   </ItemGroup>
   <Import Project="..\NuGet.props" />

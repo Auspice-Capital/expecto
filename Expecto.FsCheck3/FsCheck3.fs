@@ -14,40 +14,42 @@ module ExpectoFsCheck =
     let runner (config: FsCheckConfig) =
       { new IRunner with
           /// Called before a group of properties on a type are checked.
-          member __.OnStartFixture _ =
-            ()
+          member __.OnStartFixture _ = ()
 
           /// Called whenever arguments are generated and after the test is run.
-          member __.OnArguments (testNumber, args, formatOnEvery) =
-            config.receivedArgs config name testNumber args
-            |> Async.RunSynchronously
+          member __.OnArguments(testNumber, args, formatOnEvery) =
+            config.receivedArgs config name testNumber args |> Async.RunSynchronously
 
           /// Called on a succesful shrink.
-          member __.OnShrink (values, formatValues) =
-            config.successfulShrink config name values
-            |> Async.RunSynchronously
+          member __.OnShrink(values, formatValues) =
+            config.successfulShrink config name values |> Async.RunSynchronously
 
           /// Called whenever all tests are done, either True, False or Exhausted.
-          member __.OnFinished (fsCheckTestName, testResult) =
-            config.finishedTest config fsCheckTestName
-            |> Async.RunSynchronously
+          member __.OnFinished(fsCheckTestName, testResult) =
+            config.finishedTest config fsCheckTestName |> Async.RunSynchronously
 
-            let numTests i = if i = 1 then "1 test" else sprintf "%i tests" i
+            let numTests i =
+              if i = 1 then "1 test" else sprintf "%i tests" i
 
             let stampsToString s =
-              let entry (p,xs) = sprintf "%A%s %s" p "%" (String.concat ", " xs)
+              let entry (p, xs) =
+                sprintf "%A%s %s" p "%" (String.concat ", " xs)
+
               match Seq.map entry s |> Seq.toList with
-              | []  -> ""
-              | [x] -> sprintf " (%s)\n" x
-              | xs  -> sprintf "%s\n" (String.concat "\n" xs)
+              | [] -> ""
+              | [ x ] -> sprintf " (%s)\n" x
+              | xs -> sprintf "%s\n" (String.concat "\n" xs)
 
             match testResult with
-            | TestResult.Passed (_testData,_b) -> ()
+            | TestResult.Passed(data, suppressOutput) ->
+              if not suppressOutput then
+                $"Passed {numTests data.NumberOfTests}.\n{stampsToString data.Stamps}"
+                |> PassWithMessage
+                |> raise
 
-            | TestResult.Failed (_,_,_, Outcome.Failed (:? IgnoreException as e),_,_,_) ->
-              raise e
+            | TestResult.Failed(_, _, _, Outcome.Failed(:? IgnoreException as e), _, _, _) -> raise e
 
-            | TestResult.Failed (data, original, shrunk, outcome,originalSeed,finalSeed,size) ->
+            | TestResult.Failed(data, original, shrunk, outcome, originalSeed, finalSeed, size) ->
               let parameters =
                 original
                 |> List.map (sprintf "%A")
@@ -60,112 +62,125 @@ module ExpectoFsCheck =
                   |> List.map (sprintf "%A")
                   |> String.concat " "
                   |> sprintf "\nShrunk %i times to:\n\t%s" data.NumberOfShrinks
-                else ""
+                else
+                  ""
 
               let labels =
                 match data.Labels.Count with
                 | 0 -> String.Empty
-                | 1 -> sprintf "Label of failing property: %s\n"
-                          (Set.toSeq data.Labels |> Seq.head)
-                | _ -> sprintf "Labels of failing property (one or more is failing): %s\n"
-                          (String.concat " " data.Labels)
+                | 1 -> sprintf "Label of failing property: %s\n" (Set.toSeq data.Labels |> Seq.head)
+                | _ ->
+                  sprintf "Labels of failing property (one or more is failing): %s\n" (String.concat " " data.Labels)
 
               let original =
                 sprintf "Original seed: (%A, %A)" originalSeed.Seed originalSeed.Gamma
+
               let focus =
                 sprintf "Focus on error:\n\t%s (%A, %A, %A) \"%s\"" methodName finalSeed.Seed finalSeed.Gamma size name
 
-              sprintf "Failed after %s. %s%s\nResult:\n\t%A\n%s%s%s\n%s"
-                      (numTests data.NumberOfTests) parameters shrunk
-                      outcome labels (stampsToString data.Stamps) original focus
+              sprintf
+                "Failed after %s. %s%s\nResult:\n\t%A\n%s%s%s\n%s"
+                (numTests data.NumberOfTests)
+                parameters
+                shrunk
+                outcome
+                labels
+                (stampsToString data.Stamps)
+                original
+                focus
               |> FailedException
               |> raise
 
             | TestResult.Exhausted data ->
-              sprintf "Exhausted after %s%s"
-                (numTests data.NumberOfTests) (stampsToString data.Stamps)
+              sprintf "Exhausted after %s%s" (numTests data.NumberOfTests) (stampsToString data.Stamps)
               |> FailedException
-              |> raise
-      }
+              |> raise }
 
     let test (config: FsCheckConfig) =
 
       let config =
         Config.Default
-            .WithMaxTest(config.maxTest)
-            .WithReplay(Option.map (fun (seed,gamma,size) -> {Rnd = Rnd(seed, gamma); Size = Some(size)}) config.replay)
-            .WithName(name)
-            .WithStartSize(config.startSize)
-            .WithEndSize(config.endSize)
-            .WithQuietOnSuccess(config.quietOnSuccess)
-            .WithArbitrary(config.arbitrary)
-            .WithRunner(runner config)
-            .WithMaxRejected(config.maxRejected)
+          .WithMaxTest(config.maxTest)
+          .WithReplay(
+            Option.map
+              (fun (seed, gamma, size) ->
+                { Rnd = Rnd(seed, gamma)
+                  Size = Some(size) })
+              config.replay
+          )
+          .WithName(name)
+          .WithStartSize(config.startSize)
+          .WithEndSize(config.endSize)
+          .WithQuietOnSuccess(config.quietOnSuccess)
+          .WithArbitrary(config.arbitrary)
+          .WithRunner(runner config)
+          .WithMaxRejected(config.maxRejected)
 
 
-      Check.One(config, property)
-      |> async.Return
+      Check.One(config, property) |> async.Return
 
     let testCode =
       match configs with
-      | None ->
-        AsyncFsCheck (None, None, test)
-      | Some (testConfig, stressConfig) ->
-        AsyncFsCheck (Some testConfig, Some stressConfig, test)
+      | None -> AsyncFsCheck(None, None, test)
+      | Some(testConfig, stressConfig) -> AsyncFsCheck(Some testConfig, Some stressConfig, test)
 
-    TestLabel(name, TestCase (testCode, focusState), focusState)
+    TestLabel(name, TestCase(testCode, focusState), focusState)
 
   /// Builds a test property with config
   let testPropertyWithConfigs testConfig stressConfig name =
-    propertyTest "etestPropertyWithConfigs" Normal
-                 (Some(testConfig, stressConfig)) name
+    propertyTest "etestPropertyWithConfigs" Normal (Some(testConfig, stressConfig)) name
 
   /// Builds an ignored test property with an explicit config.
   let ptestPropertyWithConfigs testConfig stressConfig name =
-    propertyTest "etestPropertyWithConfigs" Pending
-                 (Some (testConfig,stressConfig)) name
+    propertyTest "etestPropertyWithConfigs" Pending (Some(testConfig, stressConfig)) name
 
   /// Builds an ignored test property with an explicit config.
   let ftestPropertyWithConfigs testConfig stressConfig name =
-    propertyTest "etestPropertyWithConfigs" Focused
-                 (Some (testConfig,stressConfig)) name
+    propertyTest "etestPropertyWithConfigs" Focused (Some(testConfig, stressConfig)) name
 
   /// Builds a test property with config that will make Expecto to
   /// ignore other unfocused tests and use an error stdGen.
   let etestPropertyWithConfigs stdGen testConfig stressConfig name =
     let testConfig = { testConfig with replay = Some stdGen }
-    let stressConfig = { stressConfig with replay = Some stdGen }
-    propertyTest "etestPropertyWithConfigs" Focused
-                 (Some(testConfig,stressConfig)) name
+
+    let stressConfig =
+      { stressConfig with
+          replay = Some stdGen }
+
+    propertyTest "etestPropertyWithConfigs" Focused (Some(testConfig, stressConfig)) name
 
   let testPropertyWithConfigsStdGen stdGen testConfig stressConfig name =
     let testConfig = { testConfig with replay = Some stdGen }
-    let stressConfig = { stressConfig with replay = Some stdGen }
-    propertyTest "testPropertyWithConfigsStdGen" Normal (Some (testConfig,stressConfig)) name
+
+    let stressConfig =
+      { stressConfig with
+          replay = Some stdGen }
+
+    propertyTest "testPropertyWithConfigsStdGen" Normal (Some(testConfig, stressConfig)) name
 
   /// Builds a test property with config
   let testPropertyWithConfig config name =
-    propertyTest "etestPropertyWithConfig" Normal (Some (config,config)) name
+    propertyTest "etestPropertyWithConfig" Normal (Some(config, config)) name
 
   /// Builds a test property with config that will be ignored by Expecto.
   let ptestPropertyWithConfig config name =
-    propertyTest "etestPropertyWithConfig" Pending (Some(config,config)) name
+    propertyTest "etestPropertyWithConfig" Pending (Some(config, config)) name
 
   /// Builds a test property with config that will make Expecto
   /// ignore other unfocused tests
   let ftestPropertyWithConfig config name =
-    propertyTest "etestPropertyWithConfig" Focused (Some(config,config)) name
+    propertyTest "etestPropertyWithConfig" Focused (Some(config, config)) name
 
   /// Builds a test property with config that will make Expecto
   /// ignore other unfocused tests and use an error stdGen.
   let etestPropertyWithConfig stdGen config name =
     let config = { config with replay = Some stdGen }
-    propertyTest "etestPropertyWithConfig" Focused (Some(config,config)) name
+    propertyTest "etestPropertyWithConfig" Focused (Some(config, config)) name
 
   /// Builds a test property with a config and a random seed number to ensure FsCheck runs identically every time.
   let testPropertyWithConfigStdGen stdGen config name =
     let config = { config with replay = Some stdGen }
-    propertyTest "testPropertyWithConfigStdGen" Normal (Some(config,config)) name
+    propertyTest "testPropertyWithConfigStdGen" Normal (Some(config, config)) name
 
   /// Builds a test property.
   let testProperty name =
@@ -181,19 +196,21 @@ module ExpectoFsCheck =
 
   /// Builds a test property that will make Expecto focus on this test use an error stdGen.
   let etestProperty stdGen name =
-    let config = { FsCheckConfig.defaultConfig with replay = Some stdGen }
-    propertyTest "etestProperty" Focused (Some(config,config)) name
+    let config =
+      { FsCheckConfig.defaultConfig with
+          replay = Some stdGen }
+
+    propertyTest "etestProperty" Focused (Some(config, config)) name
 
 
 type FsCheck =
-  static member Property(name, property: Func<_,bool>) =
-    testProperty name property.Invoke
+  static member Property(name, property: Func<_, bool>) = testProperty name property.Invoke
 
-  static member Property(name, property: Func<_,_,bool>) =
-    testProperty name (fun a b -> property.Invoke(a,b))
+  static member Property(name, property: Func<_, _, bool>) =
+    testProperty name (fun a b -> property.Invoke(a, b))
 
-  static member Property(name, property: Func<_,_,_,bool>) =
-    testProperty name (fun a b c -> property.Invoke(a,b,c))
+  static member Property(name, property: Func<_, _, _, bool>) =
+    testProperty name (fun a b c -> property.Invoke(a, b, c))
 
-  static member Property(name, property: Func<_,_,_,_,bool>) =
-    testProperty name (fun a b c d -> property.Invoke(a,b,c,d))
+  static member Property(name, property: Func<_, _, _, _, bool>) =
+    testProperty name (fun a b c d -> property.Invoke(a, b, c, d))

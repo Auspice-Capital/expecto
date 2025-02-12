@@ -15,14 +15,15 @@ type FsCheckTestData =
       Stamps: seq<int * list<string>> }
 
 type FsCheckConfig =
-  { /// The maximum number of tests that are run.
-    maxTest: int
+    /// The maximum number of tests that are run.
+  { maxTest: int
     /// The size to use for the first test.
     startSize: int
     /// The size to use for the last test, when all the tests are passing. The size increases linearly between Start- and EndSize.
     endSize: int
-    /// If set, the seed to use to start testing. Allows reproduction of previous runs.
-    replay: (uint64 * uint64 * int) option
+    /// (seed * gamma * size) corresponding to the FsCheck3 replay config. Allows reproduction of previous runs. The
+    /// size is ignored with FsCheck2.
+    replay: (uint64 * uint64 * int option) option
     /// The Arbitrary instances on this class will be merged in back to front order, i.e. instances for the same generated type at the front
     /// of the list will override those at the back. The instances on Arb.Default are always known, and are at the back (so they can always be
     /// overridden)
@@ -43,10 +44,6 @@ type FsCheckConfig =
                -> (* test name *) string
                -> FsCheckTestData
                -> Async<unit>
-    /// If set, suppresses the output from the test if the test is successful.
-    quietOnSuccess: bool
-    /// The maximum number of tests where values are rejected, e.g. as the result of ==>
-    maxRejected: int
   }
 
   static member defaultConfig =
@@ -58,8 +55,6 @@ type FsCheckConfig =
       receivedArgs = fun _ _ _ _ -> async.Return ()
       successfulShrink = fun _ _ _ -> async.Return ()
       finishedTest = fun _ _ _ -> async.Return ()
-      quietOnSuccess = true
-      maxRejected = 1000
     }
 
 /// Actual test function; either an async one, or a synchronous one.
@@ -139,4 +134,3 @@ type private TestNameHolder() =
   static member Name
       with get () = TestNameHolder.name
       and  set name = TestNameHolder.name <- name
-

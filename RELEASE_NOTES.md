@@ -1,6 +1,16 @@
-### 11.0.0-alpha4 - 2024-12-16
-* Allow quietOnSuccess and maxRejected fscheck config
+### 11.0.0-alpha6 - 2025-02-12
+* Add third argument to `FsCheckConfig.testFinished` containing information about the finished test.
 
+### 11.0.0-alpha5 - 2025-01-13
+* Breaking Change: Add `isTestSkipped` parameter to `TestPrinters.beforeEach`, allowing to avoid printing skipped tests to the console, thanks @rynoV
+  * Requires a coordinated upgrade to YoloDev.Expecto.TestSdk 0.15+ for use with Visual Studio, Rider, Ionide, dotnet test, or any other test runner that depends on the vstest adapter system
+
+### 11.0.0-alpha4 - 2025-01-06
+* Breaking change: Add third item to `FsCheckConfig.replay` indicating the size
+    * Fixes issue where the replay seed without the size was playing all tests leading up to the failure, making debugging
+      more difficult
+    * Existing FsCheck 2 users can enter `None` for the size, because it is ignored.
+    
 ### 11.0.0-alpha3 - 2024-10-13
 * Add testParamAsync and testParamTask (#512), thanks @1eyewonder
 

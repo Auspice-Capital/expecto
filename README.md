@@ -718,14 +718,14 @@ like the following.
 
 ```fsharp
 type FsCheckConfig =
-  { /// The maximum number of tests that are run.
-    maxTest: int
+    /// The maximum number of tests that are run.
+  { maxTest: int
     /// The size to use for the first test.
     startSize: int
     /// The size to use for the last test, when all the tests are passing. The size increases linearly between Start- and EndSize.
     endSize: int
     /// If set, the seed to use to start testing. Allows reproduction of previous runs.
-    replay: (uint64 * uint64 * int) option
+    replay: (uint64 * uint64) option
     /// The Arbitrary instances on this class will be merged in back to front order, i.e. instances for the same generated type at the front
     /// of the list will override those at the back. The instances on Arb.Default are always known, and are at the back (so they can always be
     /// overridden)
@@ -744,11 +744,8 @@ type FsCheckConfig =
     /// Callback when the test case has finished
     finishedTest: FsCheckConfig
                -> (* test name *) string
+               -> FsCheckTestData
                -> Async<unit>
-    /// If set, suppresses the output from the test if the test is successful.
-    quietOnSuccess: bool
-    /// The maximum number of tests where values are rejected, e.g. as the result of ==>
-    maxRejected: int
   }
 ```
 
@@ -1376,5 +1373,6 @@ This might be due to how terminals/the locking thereof work: try running your te
 ## Migration notes
 
 ### 11.0.0
-- Any usages of the `replay` (a.k.a `stdGen` with `etestProperty*` functions) config with FsCheck tests will need to be updated to use `uint64` by appending `UL` to the literals. They will also now require a third item indicating the size. E.g. from `(1865288075, 296281834)` to `(1865288075UL, 296281834UL, 3)`.
+- Expecto 11.0.0-alpha5 breaks compatibility with YoloDev.Expecto.TestSdk <= 0.14.3. YoloDev.Expecto.TestSdk >= 0.15 is required for use with VisualStudio, Rider, dotnet test, and anything that uses the vstest adapter system.
+- Any usages of the `replay` (a.k.a `stdGen` with `etestProperty*` functions) config with FsCheck tests will need to be updated to use `uint64` by appending `UL` to the literals. They will also now require a third item indicating the size. E.g. from `(1865288075, 296281834)` to `(1865288075UL, 296281834UL, Some 3)`. With FsCheck 2 the size is ignored and `None` can be used.
 - FsCheck 2 is no longer supported, so we're switching Expecto.FsCheck to use FsCheck 3 by default, even though FsCheck 3 is still in release candidate state. If you still want FsCheck2, we will continue to release FsCheck2 support for the time being using a version suffix, e.g. [11.0.0-fscheck2](https://www.nuget.org/packages/Expecto.FsCheck/11.0.0-alpha1-fscheck2)  

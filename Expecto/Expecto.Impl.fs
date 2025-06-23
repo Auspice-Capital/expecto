@@ -222,6 +222,19 @@ module Impl =
       /// Prints a summary given the test result counts
       summary : ExpectoConfig -> TestRunSummary -> Async<unit> }
 
+    // NOTE: with* methods provide a compatibility layer allowing us to change the TestPrinters signature
+    //       without breaking YoloDev.Expecto.TestSdk and other dependent packages
+
+    static member withBeforeRun (beforeRun: (Test -> Async<unit>)) (printer: TestPrinters) = {printer with beforeRun = beforeRun}
+    static member withBeforeEach (beforeEach: (string -> Async<unit>)) (printer: TestPrinters) = {printer with beforeEach = (fun name _ -> beforeEach name)}
+    static member withBeforeEach_WithIsSkipped (beforeEach: (string -> bool -> Async<unit>)) (printer: TestPrinters) = {printer with beforeEach = beforeEach}
+    static member withInfo (info: (string -> Async<unit>)) (printer: TestPrinters) = {printer with info = info}
+    static member withPassed (passed: (string -> TimeSpan -> Async<unit>)) (printer: TestPrinters) = {printer with passed = passed}
+    static member withIgnored (ignored: (string -> string -> Async<unit>)) (printer: TestPrinters) = {printer with ignored = ignored}
+    static member withFailed (failed: (string -> string -> TimeSpan -> Async<unit>)) (printer: TestPrinters) = {printer with failed = failed}
+    static member withExn (exn: (string -> exn -> TimeSpan -> Async<unit>)) (printer: TestPrinters) = {printer with exn = exn}
+    static member withSummary (summary: (ExpectoConfig -> TestRunSummary -> Async<unit>)) (printer: TestPrinters) = {printer with summary = summary}
+
     static member printResult config (test:FlatTest) (result:TestSummary) =
       let name = config.joinWith.format test.name
       match result.result with
@@ -978,18 +991,27 @@ module Impl =
     | Async _ | AsyncFsCheck _ ->
       ("Unknown Async", "Unknown Async")
 
+  // Load the list of types in the test assembly and cache the data
+  // Ref https://github.com/haf/expecto/issues/517 for comments on the performance
+  let private moduleDefinitionCache = System.Collections.Concurrent.ConcurrentDictionary<string, Map<string, TypeDefinition>>()
+
+  let private getTypesForAssembly (asm: Assembly) =
+
+    moduleDefinitionCache.GetOrAdd(asm.Location, valueFactory = (fun loc ->
+      let readerParams = ReaderParameters( ReadSymbols = true )
+      let moduleDefinition = ModuleDefinition.ReadModule(loc, readerParams)
+
+      seq { for t in moduleDefinition.GetTypes() -> (t.FullName, t) }
+      |> Map.ofSeq
+    ))
+
   // Ported from
   // https://github.com/adamchester/expecto-adapter/blob/885fc9fff0/src/Expecto.VisualStudio.TestAdapter/SourceLocation.fs
   let getSourceLocation (asm: Assembly) className methodName =
     let lineNumberIndicatingHiddenLine = 0xfeefee
     let getEcma335TypeName (clrTypeName:string) = clrTypeName.Replace("+", "/")
 
-    let types =
-      let readerParams = ReaderParameters( ReadSymbols = true )
-      let moduleDefinition = ModuleDefinition.ReadModule(asm.Location, readerParams)
-
-      seq { for t in moduleDefinition.GetTypes() -> (t.FullName, t) }
-      |> Map.ofSeq
+    let types = getTypesForAssembly asm
 
     let getMethods typeName =
       match types.TryFind (getEcma335TypeName typeName) with

@@ -1,3 +1,9 @@
+### 11.0.0-alpha8 - 2025-03-02
+* Update v11 with the TestPrinters builder for compatibility with YoloDev.Expecto.TestSdk 16.0+
+
+### 11.0.0-alpha7 - 2025-02-28
+* Improve performance of test location, substatially improving performance for test discovery via VSTest on large projects. thanks @Numpsy
+
 ### 11.0.0-alpha6 - 2025-02-12
 * Add third argument to `FsCheckConfig.testFinished` containing information about the finished test.
 
@@ -25,6 +31,9 @@
   * Fixes issue where many FsCheck3 runs could not be replayed since the random seed is too large.
   * Existing FsCheck 2 users should be able to use the same seeds values, but converted to `uint64`.
   * `uint64` literals can be defined like `let iAm5 = 5UL`
+
+### 10.2.2 - 2025-02-28
+* Add builder methods for TestPrinters. Using builders allows TestPrinter signatures to evolve without breaking YoloDev.Expecto.TestSdk and other packages that need to build printers. This should reduce the need for version coordination between such packages, thanks @farlee2121
 
 ### 10.2.1 - 2024-03-15
 * Fix bug where testTask and testCaseTask allow the tasks to start immediately when the test is defined, breaking backward compatibility with testTask.
